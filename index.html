@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Como um LLM gera uma resposta - passo a passo</title>
+<meta name="description" content="Animação didática mostrando, em quatro passos, como um Grande Modelo de Linguagem (LLM) gera uma resposta médica em português, com tokenização sub-lexical." />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css" />
+<style>
+  :root {
+    --color-background-primary: #FFFFFF;
+    --color-background-secondary: #F5F4EE;
+    --color-background-tertiary: #FAFAF7;
+    --color-text-primary: #2C2C2A;
+    --color-text-secondary: #5F5E5A;
+    --color-text-tertiary: #888780;
+    --color-border-tertiary: rgba(0, 0, 0, 0.15);
+    --color-border-secondary: rgba(0, 0, 0, 0.30);
+    --color-border-primary: rgba(0, 0, 0, 0.40);
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-background-primary: #1F1F1D;
+      --color-background-secondary: #28282A;
+      --color-background-tertiary: #1A1A18;
+      --color-text-primary: #F1EFE8;
+      --color-text-secondary: #B4B2A9;
+      --color-text-tertiary: #888780;
+      --color-border-tertiary: rgba(255, 255, 255, 0.15);
+      --color-border-secondary: rgba(255, 255, 255, 0.30);
+      --color-border-primary: rgba(255, 255, 255, 0.40);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--color-background-tertiary);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+
+  .container { max-width: 720px; margin: 0 auto; }
+
+  header { margin-bottom: 1.5rem; }
+  header h1 {
+    font-size: 22px;
+    font-weight: 500;
+    margin: 0 0 4px;
+    color: var(--color-text-primary);
+  }
+  header p {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  button {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 14px;
+    background: transparent;
+    color: var(--color-text-primary);
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  button:hover { background: var(--color-background-secondary); }
+  button:active { transform: scale(0.98); }
+  button:focus-visible { outline: 2px solid var(--color-text-primary); outline-offset: 2px; }
+
+  select {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    padding: 7px 10px;
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+  @keyframes pop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes ring {
+    0% { box-shadow: 0 0 0 0 rgba(15, 110, 86, 0.45); }
+    100% { box-shadow: 0 0 0 12px rgba(15, 110, 86, 0); }
+  }
+
+  .tk {
+    display: inline-block;
+    padding: 5px 8px;
+    border-radius: var(--border-radius-md);
+    font-size: 13px;
+    font-family: var(--font-mono);
+    border: 0.5px solid;
+    animation: pop 0.5s ease-out;
+    white-space: pre;
+  }
+  .tk-cont { padding: 5px 7px; }
+  .tk-blue       { background: #E6F1FB; color: #042C53; border-color: #85B7EB; }
+  .tk-blue-cont  { background: #F4F8FD; color: #185FA5; border-color: #B5D4F4; border-style: dashed; }
+  .tk-teal       { background: #E1F5EE; color: #04342C; border-color: #5DCAA5; }
+  .tk-teal-cont  { background: #F0FAF6; color: #0F6E56; border-color: #9FE1CB; border-style: dashed; }
+  .tk-fade { opacity: 0.55; }
+  .tk-pulse { animation: pop 0.6s ease-out, ring 1.2s ease-out; box-shadow: 0 0 0 0 rgba(15, 110, 86, 0.5); }
+
+  @media (prefers-color-scheme: dark) {
+    .tk-blue       { background: #0C447C; color: #B5D4F4; border-color: #378ADD; }
+    .tk-blue-cont  { background: #103E6E; color: #85B7EB; border-color: #185FA5; border-style: dashed; }
+    .tk-teal       { background: #085041; color: #9FE1CB; border-color: #1D9E75; }
+    .tk-teal-cont  { background: #0A4839; color: #5DCAA5; border-color: #0F6E56; border-style: dashed; }
+  }
+
+  .prob-row { display: flex; align-items: center; gap: 10px; transition: opacity 0.5s; }
+  .prob-token-wrap { min-width: 130px; display: flex; gap: 2px; }
+  .prob-bar-wrap {
+    flex: 1;
+    height: 18px;
+    background: var(--color-background-primary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+  }
+  .prob-bar { height: 100%; background: #B5D4F4; transition: width 0.9s ease-out; }
+  .prob-pct {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    min-width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .prob-row.chosen .prob-bar { background: #5DCAA5; }
+  .prob-row.dim { opacity: 0.35; }
+
+  @media (prefers-color-scheme: dark) {
+    .prob-bar { background: #185FA5; }
+    .prob-row.chosen .prob-bar { background: #1D9E75; }
+  }
+
+  .stage-area {
+    min-height: 400px;
+    padding: 1.25rem;
+    background: var(--color-background-secondary);
+    border-radius: var(--border-radius-lg);
+    margin-bottom: 1rem;
+  }
+
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  @media (max-width: 600px) {
+    body { padding: 16px; }
+    .stage-area { padding: 1rem; min-height: 360px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <h2 class="sr-only">Animação automática mostrando como um modelo de linguagem gera uma resposta médica em quatro passos, com tokenização em que palavras longas são divididas em pedaços.</h2>
+
+  <header>
+    <h1>Como um LLM gera uma resposta - passo a passo</h1>
+    <p>Animação didática em quatro etapas, com tokenização sobre uma frase clínica em português.</p>
+  </header>
+
+  <div id="stage-indicator" style="display: flex; gap: 8px; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap;">
+    <span id="stage-label" style="font-size: 13px; color: var(--color-text-secondary); margin-right: 8px;">Passo 1 - Você escreve um prompt</span>
+    <div style="display: flex; gap: 4px; margin-left: auto;">
+      <span class="dot" data-i="0" style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-primary);"></span>
+      <span class="dot" data-i="1" style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-border-tertiary);"></span>
+      <span class="dot" data-i="2" style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-border-tertiary);"></span>
+      <span class="dot" data-i="3" style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-border-tertiary);"></span>
+    </div>
+  </div>
+
+  <div id="stage-area" class="stage-area">
+
+    <div id="prompt-input" style="display: block;">
+      <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 8px;">Campo do chatbot</p>
+      <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); padding: 14px 16px; min-height: 60px; font-family: var(--font-sans); font-size: 15px; line-height: 1.6;">
+        <span id="typed-prompt"></span><span id="cursor" style="border-right: 2px solid var(--color-text-primary); margin-left: 1px; animation: blink 0.9s infinite;">&nbsp;</span>
+      </div>
+      <p id="prompt-caption" style="font-size: 13px; color: var(--color-text-secondary); margin: 14px 0 0; opacity: 0; transition: opacity 0.6s;">Tudo o que você digita (pergunta, documentos colados, histórico) é a entrada do modelo.</p>
+    </div>
+
+    <div id="tokenize-area" style="display: none;">
+      <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 12px;">O texto é convertido em tokens (pedaços de palavras).</p>
+      <div id="prompt-tokens" style="display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 16px; min-height: 36px; align-items: center;"></div>
+      <p id="tokenize-caption" style="font-size: 13px; color: var(--color-text-secondary); margin: 0; opacity: 0; transition: opacity 0.6s;">Palavras frequentes podem virar um token; palavras longas ou raras como "hipertensão" são divididas em sub-pedaços. O símbolo · marca o espaço que vem antes do token.</p>
+    </div>
+
+    <div id="generation-area" style="display: none;">
+      <div style="margin-bottom: 16px;">
+        <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 8px;">Sequência até agora</p>
+        <div id="sequence" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 10px; background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); min-height: 44px; align-items: center;"></div>
+      </div>
+      <div id="probs-block" style="display: none;">
+        <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 8px;">Probabilidades calculadas para o próximo token</p>
+        <div id="probs-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+      </div>
+      <p id="gen-caption" style="font-size: 13px; color: var(--color-text-secondary); margin: 14px 0 0; min-height: 20px;"></p>
+    </div>
+
+    <div id="final-area" style="display: none;">
+      <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 8px;">Resposta completa</p>
+      <div id="final-sequence" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 14px; background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); margin-bottom: 16px; align-items: center;"></div>
+      <div style="display: flex; gap: 16px; font-size: 13px; color: var(--color-text-secondary); flex-wrap: wrap;">
+        <span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 14px; background: #E6F1FB; border: 0.5px solid #185FA5; border-radius: 3px; display: inline-block;"></span>Tokens do prompt</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 14px; background: #E1F5EE; border: 0.5px solid #0F6E56; border-radius: 3px; display: inline-block;"></span>Tokens gerados pelo modelo</span>
+      </div>
+      <p style="font-size: 13px; color: var(--color-text-secondary); margin: 14px 0 0;">Repare como uma frase de 7 palavras vira muito mais tokens (termos médicos consomem mais tokens do que o texto cotidiano).</p>
+    </div>
+
+  </div>
+
+  <div class="controls">
+    <button id="pause-btn" type="button"><i class="ti ti-player-pause" aria-hidden="true" style="font-size: 16px; vertical-align: -2px; margin-right: 4px;"></i>Pausar</button>
+    <button id="restart-btn" type="button"><i class="ti ti-refresh" aria-hidden="true" style="font-size: 16px; vertical-align: -2px; margin-right: 4px;"></i>Reiniciar</button>
+    <span id="status" style="font-size: 13px; color: var(--color-text-secondary); margin-left: auto;">Em execução</span>
+  </div>
+
+</div>
+
+<script>
+let SPEED = 1.0;
+
+(function () {
+  const promptText = "Para tratar hipertensão arterial, considere";
+
+  const promptTokens = [
+    { t: "Para",      cont: false },
+    { t: "·tratar",   cont: false },
+    { t: "·hi",       cont: false },
+    { t: "per",       cont: true  },
+    { t: "tens",      cont: true  },
+    { t: "ão",        cont: true  },
+    { t: "·arterial", cont: false },
+    { t: ",",         cont: false },
+    { t: "·consider", cont: false },
+    { t: "e",         cont: true  }
+  ];
+
+  const generationSteps = [
+    {
+      candidates: [
+        { token: "·in",     pct: 36 },
+        { token: "·blo",    pct: 22 },
+        { token: "·diur",   pct: 17 },
+        { token: "·med",    pct: 10 },
+        { token: "·sempre", pct: 8  },
+        { token: "·avali",  pct: 7  }
+      ],
+      chosen: 0,
+      cont: false,
+      showProbs: true
+    },
+    {
+      candidates: [
+        { token: "ib",   pct: 78 },
+        { token: "ic",   pct: 9  },
+        { token: "imig", pct: 7  },
+        { token: "tens", pct: 6  }
+      ],
+      chosen: 0,
+      cont: true,
+      showProbs: true
+    },
+    {
+      candidates: [
+        { token: "idor", pct: 92 },
+        { token: "indo", pct: 4  },
+        { token: "ido",  pct: 4  }
+      ],
+      chosen: 0,
+      cont: true,
+      showProbs: true
+    },
+    { token: "·da",       cont: false, showProbs: false },
+    { token: "·E",        cont: false, showProbs: false },
+    { token: "CA",        cont: true,  showProbs: false },
+    { token: "·como",     cont: false, showProbs: false },
+    { token: "·primeira", cont: false, showProbs: false },
+    { token: "·esc",      cont: false, showProbs: false },
+    { token: "olha",      cont: true,  showProbs: false },
+    { token: "·em",       cont: false, showProbs: false },
+    { token: "·pacient",  cont: false, showProbs: false },
+    { token: "es",        cont: true,  showProbs: false },
+    { token: "·com",      cont: false, showProbs: false },
+    { token: "·como",     cont: false, showProbs: false },
+    { token: "rb",        cont: true,  showProbs: false },
+    { token: "idades",    cont: true,  showProbs: false },
+    { token: ".",         cont: false, showProbs: false }
+  ];
+
+  let timers = [];
+  let paused = false;
+
+  function clearTimers() {
+    timers.forEach(t => clearTimeout(t));
+    timers = [];
+  }
+  function wait(ms) {
+    return new Promise(resolve => {
+      const t = setTimeout(resolve, ms * SPEED);
+      timers.push(t);
+    });
+  }
+  function setStage(n, label) {
+    document.getElementById("stage-label").textContent = label;
+    document.querySelectorAll(".dot").forEach(d => {
+      const i = parseInt(d.dataset.i, 10);
+      d.style.background = i <= n ? "var(--color-text-primary)" : "var(--color-border-tertiary)";
+    });
+  }
+  function showArea(id) {
+    ["prompt-input", "tokenize-area", "generation-area", "final-area"].forEach(a => {
+      document.getElementById(a).style.display = (a === id) ? "block" : "none";
+    });
+  }
+  function makeToken(text, cont, ramp) {
+    const span = document.createElement("span");
+    let cls = "tk ";
+    if (ramp === "blue") cls += cont ? "tk-blue-cont tk-cont" : "tk-blue";
+    else if (ramp === "teal") cls += cont ? "tk-teal-cont tk-cont" : "tk-teal";
+    span.className = cls;
+    span.textContent = text;
+    return span;
+  }
+
+  async function runStep1() {
+    setStage(0, "Passo 1 - Você escreve um prompt");
+    showArea("prompt-input");
+    const target = document.getElementById("typed-prompt");
+    target.textContent = "";
+    document.getElementById("cursor").style.display = "inline";
+    document.getElementById("prompt-caption").style.opacity = "0";
+    await wait(800);
+    for (let i = 0; i < promptText.length; i++) {
+      if (paused) await waitForResume();
+      target.textContent += promptText[i];
+      await wait(60);
+    }
+    document.getElementById("cursor").style.display = "none";
+    await wait(900);
+    document.getElementById("prompt-caption").style.opacity = "1";
+    await wait(4000);
+  }
+
+  async function runStep2() {
+    setStage(1, "Passo 1b - O texto vira tokens (pedaços de palavras)");
+    showArea("tokenize-area");
+    const container = document.getElementById("prompt-tokens");
+    container.innerHTML = "";
+    document.getElementById("tokenize-caption").style.opacity = "0";
+    await wait(700);
+    for (let i = 0; i < promptTokens.length; i++) {
+      if (paused) await waitForResume();
+      container.appendChild(makeToken(promptTokens[i].t, promptTokens[i].cont, "blue"));
+      await wait(320);
+    }
+    await wait(900);
+    document.getElementById("tokenize-caption").style.opacity = "1";
+    await wait(5000);
+  }
+
+  async function runStep3and4() {
+    setStage(2, "Passo 2 - Probabilidades · Passo 3 - Token escolhido");
+    showArea("generation-area");
+    const sequence = document.getElementById("sequence");
+    sequence.innerHTML = "";
+    promptTokens.forEach(p => {
+      const node = makeToken(p.t, p.cont, "blue");
+      node.classList.add("tk-fade");
+      sequence.appendChild(node);
+    });
+
+    document.getElementById("gen-caption").textContent = "";
+    await wait(800);
+
+    for (let s = 0; s < generationSteps.length; s++) {
+      if (paused) await waitForResume();
+      const step = generationSteps[s];
+      if (step.showProbs) {
+        await showProbabilities(step);
+      } else {
+        document.getElementById("probs-block").style.display = "none";
+        document.getElementById("gen-caption").textContent = "Passo 4 - O processo se repete: novas probabilidades, novo token escolhido, sempre token a token.";
+      }
+      const chosenToken = step.showProbs ? step.candidates[step.chosen].token : step.token;
+      const isCont = step.cont;
+      const node = makeToken(chosenToken, isCont, "teal");
+      node.classList.add("tk-pulse");
+      sequence.appendChild(node);
+      await wait(step.showProbs ? 1800 : 650);
+    }
+
+    setStage(3, "Passo 4 - Repetição até a condição de parada");
+    document.getElementById("gen-caption").textContent = "Condição de parada atingida - fim da geração.";
+    await wait(3500);
+  }
+
+  async function showProbabilities(step) {
+    const block = document.getElementById("probs-block");
+    const list = document.getElementById("probs-list");
+    block.style.display = "block";
+    list.innerHTML = "";
+    document.getElementById("gen-caption").textContent = "Cada candidato recebe uma probabilidade. O parâmetro temperatura define como escolher.";
+
+    step.candidates.forEach((c, i) => {
+      const row = document.createElement("div");
+      row.className = "prob-row";
+      row.dataset.i = i;
+      const tokWrap = document.createElement("div");
+      tokWrap.className = "prob-token-wrap";
+      tokWrap.appendChild(makeToken(c.token, step.cont, "blue"));
+      const barWrap = document.createElement("div");
+      barWrap.className = "prob-bar-wrap";
+      const bar = document.createElement("div");
+      bar.className = "prob-bar";
+      bar.style.width = "0%";
+      barWrap.appendChild(bar);
+      const pct = document.createElement("span");
+      pct.className = "prob-pct";
+      pct.textContent = c.pct + "%";
+      row.appendChild(tokWrap);
+      row.appendChild(barWrap);
+      row.appendChild(pct);
+      list.appendChild(row);
+    });
+    await wait(300);
+    list.querySelectorAll(".prob-bar").forEach((bar, i) => {
+      bar.style.width = step.candidates[i].pct + "%";
+    });
+    await wait(1700);
+    const rows = list.querySelectorAll(".prob-row");
+    rows.forEach((r, i) => {
+      if (i === step.chosen) {
+        r.classList.add("chosen");
+        const tokenEl = r.querySelector(".tk");
+        tokenEl.classList.remove("tk-blue", "tk-blue-cont");
+        tokenEl.classList.add(step.cont ? "tk-teal-cont" : "tk-teal");
+        if (step.cont) tokenEl.classList.add("tk-cont");
+      } else {
+        r.classList.add("dim");
+      }
+    });
+    document.getElementById("gen-caption").textContent = "Token escolhido: " + step.candidates[step.chosen].token;
+    await wait(1900);
+  }
+
+  async function runStepFinal() {
+    showArea("final-area");
+    const final = document.getElementById("final-sequence");
+    final.innerHTML = "";
+    promptTokens.forEach(p => final.appendChild(makeToken(p.t, p.cont, "blue")));
+    generationSteps.forEach(step => {
+      const t = step.showProbs ? step.candidates[step.chosen].token : step.token;
+      final.appendChild(makeToken(t, step.cont, "teal"));
+    });
+    await wait(7500);
+  }
+
+  function waitForResume() {
+    return new Promise(resolve => {
+      const check = () => {
+        if (!paused) resolve();
+        else setTimeout(check, 120);
+      };
+      check();
+    });
+  }
+
+  async function runLoop() {
+    while (true) {
+      await runStep1();
+      if (paused) await waitForResume();
+      await runStep2();
+      if (paused) await waitForResume();
+      await runStep3and4();
+      if (paused) await waitForResume();
+      await runStepFinal();
+      await wait(1500);
+    }
+  }
+
+  document.getElementById("pause-btn").addEventListener("click", function () {
+    paused = !paused;
+    const btn = document.getElementById("pause-btn");
+    const status = document.getElementById("status");
+    if (paused) {
+      btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true" style="font-size: 16px; vertical-align: -2px; margin-right: 4px;"></i>Continuar';
+      status.textContent = "Pausado";
+    } else {
+      btn.innerHTML = '<i class="ti ti-player-pause" aria-hidden="true" style="font-size: 16px; vertical-align: -2px; margin-right: 4px;"></i>Pausar';
+      status.textContent = "Em execução";
+    }
+  });
+
+  document.getElementById("restart-btn").addEventListener("click", function () {
+    clearTimers();
+    paused = false;
+    document.getElementById("pause-btn").innerHTML = '<i class="ti ti-player-pause" aria-hidden="true" style="font-size: 16px; vertical-align: -2px; margin-right: 4px;"></i>Pausar';
+    document.getElementById("status").textContent = "Em execução";
+    runLoop();
+  });
+
+  const speedSelect = document.getElementById("speed-select");
+  if (speedSelect) {
+    speedSelect.addEventListener("change", function (e) {
+      SPEED = parseFloat(e.target.value);
+    });
+  }
+
+  runLoop();
+})();
+</script>
+
+</body>
+</html>

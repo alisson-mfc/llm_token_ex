@@ -412,12 +412,32 @@
   }
   .stage-indicator { display: flex; gap: 8px; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; }
   #stage-label { font-size: 13px; color: var(--color-text-secondary); margin-right: 8px; }
-  .dots { display: flex; gap: 4px; margin-left: auto; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-border-tertiary); transition: background 0.3s; }
-  .dot.on { background: var(--color-text-primary); }
+  .dots { display: flex; gap: 6px; margin-left: auto; }
+  button.dot {
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--color-border-tertiary);
+    transition: background 0.3s, transform 0.15s;
+  }
+  button.dot:hover { background: var(--color-text-tertiary); transform: scale(1.25); }
+  button.dot.on { background: var(--color-text-primary); }
 
   .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  #status { font-size: 13px; color: var(--color-text-secondary); margin-left: auto; }
+  .controls button:disabled { opacity: 0.4; cursor: default; }
+  .controls button:disabled:hover { background: transparent; }
+  .controls .spacer { flex: 1; }
+  #status { font-size: 13px; color: var(--color-text-secondary); }
+  .hint-keys { font-size: 12px; color: var(--color-text-tertiary); margin: 8px 0 0; }
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: 4px;
+  }
 
   .footnote { font-size: 12px; color: var(--color-text-tertiary); margin: 1.25rem 0 0; line-height: 1.5; }
 
@@ -443,11 +463,11 @@
   <div class="stage-indicator">
     <span id="stage-label" aria-live="polite">Passo 1 · Você faz uma pergunta</span>
     <div class="dots">
-      <span class="dot on" data-i="0"></span>
-      <span class="dot" data-i="1"></span>
-      <span class="dot" data-i="2"></span>
-      <span class="dot" data-i="3"></span>
-      <span class="dot" data-i="4"></span>
+      <button type="button" class="dot on" data-i="0" aria-label="Ir para o passo 1" title="Passo 1"></button>
+      <button type="button" class="dot" data-i="1" aria-label="Ir para o passo 2" title="Passo 2"></button>
+      <button type="button" class="dot" data-i="2" aria-label="Ir para o passo 3" title="Passo 3"></button>
+      <button type="button" class="dot" data-i="3" aria-label="Ir para o passo 4" title="Passo 4"></button>
+      <button type="button" class="dot" data-i="4" aria-label="Ir para o passo 5" title="Passo 5"></button>
     </div>
   </div>
 
@@ -560,11 +580,14 @@
   </div>
 
   <div class="controls">
+    <button id="prev-btn" type="button"><i class="ti ti-chevron-left" aria-hidden="true"></i>Anterior</button>
     <button id="pause-btn" type="button"><i class="ti ti-player-pause" aria-hidden="true"></i>Pausar</button>
-    <button id="restart-btn" type="button"><i class="ti ti-refresh" aria-hidden="true"></i>Reiniciar</button>
-    <button id="skip-btn" type="button"><i class="ti ti-player-skip-forward" aria-hidden="true"></i>Ir para o final</button>
+    <button id="next-btn" type="button">Próximo<i class="ti ti-chevron-right" aria-hidden="true" style="margin: 0 0 0 4px;"></i></button>
+    <span class="spacer"></span>
     <span id="status">Em execução</span>
+    <button id="restart-btn" type="button"><i class="ti ti-refresh" aria-hidden="true"></i>Reiniciar</button>
   </div>
+  <p class="hint-keys">Dica: use as setas <kbd>←</kbd> <kbd>→</kbd> do teclado para voltar ou avançar, ou clique nas bolinhas para ir direto a um passo.</p>
 
   <p class="footnote">Exemplo didático: os tokens, os marcadores e as probabilidades são ilustrativos e simplificados. Não são a saída de um modelo real e não substituem diretrizes clínicas.</p>
 
@@ -680,7 +703,11 @@ let SPEED = 1.0;
     "Passo 4 · A resposta é gerada, um token por vez",
     "Passo 5 · A resposta final, e se fosse outro token?"
   ];
+  let currentStage = 0;
   function setStage(n) {
+    currentStage = n;
+    $("prev-btn").disabled = n === 0;
+    $("next-btn").disabled = n === STAGES.length - 1;
     $("stage-label").textContent = STAGES[n];
     document.querySelectorAll(".dot").forEach(d => d.classList.toggle("on", parseInt(d.dataset.i, 10) <= n));
   }
@@ -787,7 +814,7 @@ let SPEED = 1.0;
     msgs.appendChild(ai);
     await wait(1500);
     caption("chat-caption", true);
-    await wait(4500);
+    await wait(7000);
   }
 
   // ---------- Passo 2 ----------
@@ -800,10 +827,10 @@ let SPEED = 1.0;
     await wait(700);
     for (const s of segs) {
       s.classList.add("show");
-      await wait(1800);
+      await wait(3000);
     }
     caption("backstage-caption", true);
-    await wait(7500);
+    await wait(12000);
   }
 
   // ---------- Passo 3 ----------
@@ -827,9 +854,9 @@ let SPEED = 1.0;
     }
     await wait(700);
     $("token-stats").classList.add("show");
-    await wait(900);
+    await wait(2500);
     caption("tokenize-caption", true);
-    await wait(7000);
+    await wait(12000);
   }
 
   // ---------- Passo 4 ----------
@@ -843,7 +870,7 @@ let SPEED = 1.0;
     cands.forEach(c => list.appendChild(buildProbRow(c)));
     await wait(300);
     list.querySelectorAll(".prob-bar").forEach((bar, i) => { bar.style.width = cands[i].pct + "%"; });
-    await wait(opts.decisive ? 3200 : 1700);
+    await wait(opts.decisive ? 5500 : 4000);
     list.querySelectorAll(".prob-row").forEach((r, i) => {
       if (i === chosen) {
         r.classList.add("chosen");
@@ -890,24 +917,25 @@ let SPEED = 1.0;
         await showProbabilities(FIRST_CANDS, 0, {
           intro: "O modelo calcula a probabilidade de cada token possível vir a seguir. Existem milhares de candidatos; aqui aparecem os mais prováveis.",
           picked: "Há várias boas formas de começar. O modelo sorteia entre os candidatos, dando mais chance aos mais prováveis. Desta vez saiu <strong>Para</strong>.",
-          hold: 2600
+          hold: 6000
         });
       } else if (i === PREFIX.length) {
         await showProbabilities(DECISIVE_CANDS, CHOSEN, {
           decisive: true,
           intro: "<strong>Momento decisivo:</strong> o token escolhido aqui define o rumo de toda a resposta. Repare que nenhuma opção tem 100%.",
           picked: `Escolhido: <strong>${display(DECISIVE_CANDS[CHOSEN].t).trim()}</strong>, o início de "${BRANCHES[CHOSEN].hint}". O modelo não consultou uma diretriz: escolheu a continuação mais provável, com base nos textos com que foi treinado.`,
-          hold: 4500
+          hold: 10000
         });
       } else {
         shown = false;
         if (i === 1 || i === PREFIX.length + 1) {
           hideProbabilities();
           $("gen-caption").textContent = "O ciclo se repete a cada token: calcular probabilidades, escolher um, acrescentar ao texto e recomeçar com o texto maior.";
+          await wait(1500);
         }
       }
       emit(seq[i]);
-      await wait(shown ? 1200 : 220);
+      await wait(shown ? 1200 : 380);
     }
 
     await showProbabilities(END_CANDS, 0, {
@@ -917,7 +945,7 @@ let SPEED = 1.0;
     });
     emit({ t: "<|fim|>", cont: false });
     $("gen-caret").style.display = "none";
-    await wait(4500);
+    await wait(8000);
   }
 
   // ---------- Passo 5 ----------
@@ -986,12 +1014,13 @@ let SPEED = 1.0;
   }
 
   // ---------- Execução ----------
-  async function runAll() {
+  const STEPS = [runStep1, runStep2, runStep3, runStep4];
+
+  // Interrompe o que estiver rodando e segue a animação a partir do passo n.
+  async function runFrom(n) {
+    cancelRun();
     $("status").textContent = "Em execução";
-    await runStep1();
-    await runStep2();
-    await runStep3();
-    await runStep4();
+    for (let i = n; i < STEPS.length; i++) await STEPS[i]();
     renderFinal();
   }
 
@@ -1005,9 +1034,21 @@ let SPEED = 1.0;
     }
   }
 
+  const goPrev = () => { if (currentStage > 0) runFrom(currentStage - 1); };
+  const goNext = () => { if (currentStage < STAGES.length - 1) runFrom(currentStage + 1); };
+
   $("pause-btn").addEventListener("click", () => setPaused(!paused));
-  $("restart-btn").addEventListener("click", () => { cancelRun(); runAll(); });
-  $("skip-btn").addEventListener("click", () => { cancelRun(); renderFinal(); });
+  $("restart-btn").addEventListener("click", () => runFrom(0));
+  $("prev-btn").addEventListener("click", goPrev);
+  $("next-btn").addEventListener("click", goNext);
+  document.querySelectorAll(".dot").forEach(d => {
+    d.addEventListener("click", () => runFrom(parseInt(d.dataset.i, 10)));
+  });
+  document.addEventListener("keydown", e => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === "ArrowLeft") goPrev();
+    else if (e.key === "ArrowRight") goNext();
+  });
 
   $("tpl-sys").textContent = textOf(SYS);
   $("tpl-question").textContent = questionText;
@@ -1017,7 +1058,7 @@ let SPEED = 1.0;
   $("stat-total").textContent = INPUT.length;
   renderChoices();
 
-  runAll();
+  runFrom(0);
 })();
 </script>
 
